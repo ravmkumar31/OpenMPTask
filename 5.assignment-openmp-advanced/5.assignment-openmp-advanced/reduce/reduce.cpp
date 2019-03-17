@@ -18,32 +18,47 @@ extern "C" {
 }
 #endif
 
-
+int result=0;
 
 int* reduce(int *arr, size_t n, int nbthreads, int *partial_sum){
-  int granularity = n/nbthreads;
-  #pragma omp parallel for
-  for(int i=0; i<n; i+=granularity){
+  // int granularity = n/nbthreads;
+  // #pragma omp parallel for
+  // for(int i=0; i<n; i+=granularity){
 
-    int j;
+  //   int j;
 
-    int begin = i;
+  //   int begin = i;
 
-    int end = begin+granularity;
+  //   int end = begin+granularity;
 
-    if(end>n){
+  //   if(end>n){
 
-      end = n;
-    }
+  //     end = n;
+  //   }
+  //   #pragma omp task
+  //   {
+  //     for(j=begin;j<end;j++){
+  //       partial_sum[omp_get_thread_num()]+=arr[j];
+  //     }
+  //   }
+  // }
+  #pragma omp parallel default(shared)
+  {
+    int sub_chunk = n/nbthreads;
+    int begin, end, sum=0;
+    int tid= omp_get_thread_num();
+    begin= ((tid)*sub_chunk);
+    end= ((tid+1)*sub_chunk);
+
     #pragma omp task
     {
-      for(j=begin;j<end;j++){
-        partial_sum[omp_get_thread_num()]+=arr[j];
+      for(int i=begin; i<end; i++){
+        sum+= arr[i] ;
       }
     }
+    #pragma omp critical
+    result+=sum; 
   }
-
-  return partial_sum;
 }
 
 
@@ -71,7 +86,7 @@ int main (int argc, char* argv[]) {
   int chunk = n/nbthreads;
   int * arr = new int [n];
   int i,tid;
-  int result=0;
+  
   int * partial_sum = new int [nbthreads];
   
   omp_set_num_threads(nbthreads);
