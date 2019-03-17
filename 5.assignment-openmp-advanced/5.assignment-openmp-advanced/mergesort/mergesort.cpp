@@ -4,10 +4,10 @@
 #include <fcntl.h>
 #include <iostream>
 #include <unistd.h>
-#include <chrono>
+#include <omp.h>
 #include <string.h>
 #include <stdlib.h>
-#include <omp.h>
+#include <chrono>
 
 #ifdef __cplusplus
 extern "C" {
@@ -20,89 +20,61 @@ extern "C" {
 }
 #endif
 
-int compare( const void * pa, const void * pb ) {
 
-  const int a = *((const int*) pa);
-  const int b = *((const int*) pb);
 
-  return (a-b);
-}
-
-void merge(int * array, int * workspace, int low, int mid, int high) {
-
-  int i = low;
-  int j = mid + 1;
-  int l = low;
-
-  while( (l <= mid) && (j <= high) ) {
-    if( array[l] <= array[j] ) {
-      workspace[i] = array[l];
-      l++;
-    } else {
-      workspace[i] = array[j];
-      j++;
+void merge(int * arr, int l, int m, int r,int * temp) 
+{ 
+    int i, j, k; 
+    int n1 = m - l + 1; 
+    int n2 =  r - m; 
+    for(i=l,j=m+1,k=l;i<=m &&j<=r;)
+     {
+        if(arr[i] <arr[j]){
+           temp[k] = arr[i];
+           i++; k++;
     }
-    i++;
-  }
-  if (l > mid) {
-    for(int k=j; k <= high; k++) {
-      workspace[i]=array[k];
-      i++;
+        else
+        {
+           temp[k] = arr[j];
+           j++; k++;
+         }           
+     }
+    if(i <= m)
+    {
+     for(;i<=m;i++,k++)
+      temp[k] = arr[i];
     }
-  } else {
-    for(int k=l; k <= mid; k++) {
-      workspace[i]=array[k];
-      i++;
+    if(j <= r)
+    {
+     for(;j<=r;j++,k++)
+      temp[k] = arr[j];
     }
-  }
-  for(int k=low; k <= high; k++) {
-    array[k] = workspace[k];
-  }
-}
+    for(i = l;i<=r;i++)
+        arr[i] = temp[i];
+  
+} 
 
-void mergesort_impl(int array[],int workspace[],int low,int high) {
+int chunk;
 
-  const int threshold = 1000000;
-
-  if( high - low > threshold  ) {
-    int mid = (low+high)/2;
-    /* Recursively sort on halves */
-#ifdef _OPENMP
-#pragma omp task 
-#endif
-    mergesort_impl(array,workspace,low,mid);
-#ifdef _OPENMP
-#pragma omp task
-#endif
-    mergesort_impl(array,workspace,mid+1,high);
-#ifdef _OPENMP
-#pragma omp taskwait
-#endif
-    /* Merge the two sorted halves */
-#ifdef _OPENMP
-#pragma omp task
-#endif
-    merge(array,workspace,low,mid,high);
-#ifdef _OPENMP
-#pragma omp taskwait
-#endif
-  } else if (high - low > 0) {
-    /* Coarsen the base case */
-    qsort(&array[low],high-low+1,sizeof(int),compare);
-  }
-
-}
-
-void mergesort(int array[],int workspace[],int low,int high) {
-  #ifdef _OPENMP
-  #pragma omp parallel
-  #endif
-  {
-#ifdef _OPENMP
-#pragma omp single nowait
-#endif
-    mergesort_impl(array,workspace,low,high);
-  }
+void mergeSort(int * arr, int l, int r,int * temp) 
+{
+   if( l >= r)
+       return;
+   int mid = (l+r)/2; 
+    if((r-l) <= chunk)
+    {
+      mergeSort(arr,l,mid,temp);
+      mergeSort(arr,mid+1,r,temp);
+      merge(arr,l,mid,r,temp);
+      return;
+     }
+    
+    #pragma omp task untied firstprivate(arr,temp,l,mid,chunk)
+          mergeSort(arr,l,mid,temp);
+    #pragma omp task untied firstprivate(arr,temp,r,mid,chunk)
+          mergeSort(arr,mid+1,r,temp);
+    #pragma omp taskwait
+    merge(arr,l,mid,r,temp);
 }
 
 
@@ -125,26 +97,23 @@ int main (int argc, char* argv[]) {
   }
 
   int n = atoi(argv[1]);
+  int nbthreads= atoi(argv[2]);
+  chunk = n/nbthreads;
   
   // get arr data
   int * arr = new int [n];
-  int * tmp = new int [n];
+  int * temp = new int [n];
   generateMergeSortData (arr, n);
+  omp_set_num_threads(nbthreads);
 
   //insert sorting code here.
-
   auto clock_start = std::chrono::system_clock::now(); 
-    #pragma omp parallel
-    {
-      #pragma omp single
-      // mergesort(arr, n, tmp);
-      mergesort(arr,tmp,0,n-1);
-    }
+  mergeSort(arr,0,n-1,temp);
   auto clock_end = std::chrono::system_clock::now();
   std::chrono::duration<double> elapsed_seconds = clock_end-clock_start;
-  std::cerr<<elapsed_seconds.count()<<std::endl;
-  
+   
   checkMergeSortResult (arr, n);
+  std::cerr<<elapsed_seconds.count()<<std::endl;
   
   delete[] arr;
 
