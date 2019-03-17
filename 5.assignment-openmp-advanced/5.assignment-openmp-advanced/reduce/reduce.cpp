@@ -1,118 +1,112 @@
 #include <omp.h>
 #include <stdio.h>
 #include <iostream>
+#include <string>
+#include <ctime>
+#include <ratio>
+#include <chrono>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include<chrono>
+#include <math.h>
 #include <unistd.h>
+#include <stdlib.h>
 
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-  void generateReduceData (int* arr, size_t n);
+   void generateReduceData (int* arr, size_t n);
 
 #ifdef __cplusplus
 }
 #endif
 
-int result=0;
-
-int* reduce(int *arr, size_t n, int nbthreads, int *partial_sum){
-  // int granularity = n/nbthreads;
-  // #pragma omp parallel for
-  // for(int i=0; i<n; i+=granularity){
-
-  //   int j;
-
-  //   int begin = i;
-
-  //   int end = begin+granularity;
-
-  //   if(end>n){
-
-  //     end = n;
-  //   }
-  //   #pragma omp task
-  //   {
-  //     for(j=begin;j<end;j++){
-  //       partial_sum[omp_get_thread_num()]+=arr[j];
-  //     }
-  //   }
-  // }
-  #pragma omp parallel default(shared)
-  {
-    int sub_chunk = n/nbthreads;
-    int begin, end, sum=0;
-    int tid= omp_get_thread_num();
-    begin= ((tid)*sub_chunk);
-    end= ((tid+1)*sub_chunk);
-
-    #pragma omp task
-    {
-      for(int i=begin; i<end; i++){
-        sum+= arr[i] ;
-      }
-    }
-    #pragma omp critical
-    result+=sum; 
-  }
+int calculateSum(int* arr, int start, int end)
+{
+   int sum = 0;
+   // If there are more threads available, creating nested parallel section
+#pragma omp parallel for reduction(+:sum)
+   for(int i=start;i<end;i++)
+   {
+       sum += arr[i];
+   }
+   return sum;
 }
 
 
-int main (int argc, char* argv[]) {
-  //forces openmp to create the threads beforehand
+int main (int argc, char* argv[]) 
+{
+   if (argc < 3) 
+   {
+       std::cerr<<"Usage: "<<argv[0]<<" <n> <nbthreads>"<<std::endl;
+       return -1;
+   }
+
+   int n = atoi(argv[1]);
+   int numThreads = atoi(argv[2]); 
+   if (n< numThreads)
+       numThreads = n;
+   omp_set_num_threads(numThreads);
+
+   //forces openmp to create the threads beforehand
 #pragma omp parallel
-  {
-    int fd = open (argv[0], O_RDONLY);
-    if (fd != -1) {
-      close (fd);
-    }
-    else {
-      std::cerr<<"something is amiss"<<std::endl;
-    }
-  }
-  
-  if (argc < 3) {
-    std::cerr<<"usage: "<<argv[0]<<" <n> <nbthreads>"<<std::endl;
-    return -1;
-  }
+   {
+       int fd = open (argv[0], O_RDONLY);
+       if (fd != -1) {
+           close (fd);
+       }
+       else {
+           std::cerr<<"something is amiss"<<std::endl;
+       }
+   }
 
+   int * arr = new int [n];
 
-  int n = atoi(argv[1]);
-  int nbthreads= atoi(argv[2]);
-  int chunk = n/nbthreads;
-  int * arr = new int [n];
-  int i,tid;
-  
-  int * partial_sum = new int [nbthreads];
-  
-  omp_set_num_threads(nbthreads);
-  generateReduceData (arr, atoi(argv[1]));
+   generateReduceData (arr, n);
 
-  //insert reduction code here
-  auto clock_start = std::chrono::system_clock::now(); 
-  reduce(arr, n, nbthreads,partial_sum);
-  
-  for(int thread =0;thread <= nbthreads; thread++){
-    result+=partial_sum[thread];
-  }
+   std::chrono::high_resolution_clock::time_point start;
 
-  auto clock_end = std::chrono::system_clock::now();
-  std::chrono::duration<double> elapsed_seconds = clock_end-clock_start;
+   int sum = 0;
+   start = std::chrono::high_resolution_clock::now();
+   int *tempSum;
 
-  std::cout<<result<<std::endl;
+#pragma omp parallel 
+   {
+       int id = omp_get_thread_num();
+       static int val ;
+#pragma omp single 
+       {
+           numThreads = omp_get_num_threads();
+           int chunkSize = ceil(static_cast<float>(n/numThreads));
 
-  std::cerr<<elapsed_seconds.count()<<std::endl;
-    
+           for(int i=0; i<numThreads;i++)
+           {
+               int start1  = floor(i*((float)n/numThreads));
+               int end1  = floor((i+1)*((float)n/numThreads));
+               if(end1>n)
+                   end1=n;
+#pragma omp task 
+               {
+                   val = calculateSum(arr, start1, end1);
+#pragma omp critical
+                   {
+                       sum += val;
+                   }
+               }
+           }
+       }
+#pragma omp taskwait
+   }
+   std::chrono::high_resolution_clock::time_point end  = std::chrono::high_resolution_clock::now();
 
-  delete[] arr;
+   std::chrono::duration<double> elapsed_seconds = end-start;
+   std::cerr.precision(10);
+   std::cerr<<std::fixed<<elapsed_seconds.count()<<std::endl;
 
-  return 0;
+   delete[] arr;
+
+   std::cout<<sum<<std::endl;
+   return 0;
 }
-
-  
-  
-  
