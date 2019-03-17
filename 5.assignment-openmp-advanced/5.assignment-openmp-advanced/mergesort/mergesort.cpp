@@ -20,46 +20,89 @@ extern "C" {
 }
 #endif
 
-void merge(int * arr, int n, int * tmp) {
-   int i = 0;
-   int j = n/2;
-   int ti = 0;
+int compare( const void * pa, const void * pb ) {
 
-   while (i<n/2 && j<n) {
-      if (arr[i] < arr[j]) {
-         tmp[ti] = arr[i];
-         ti++; i++;
-      } else {
-         tmp[ti] = arr[j];
-         ti++; j++;
-      }
-   }
-   while (i<n/2) { /* finish up lower half */
-      tmp[ti] = arr[i];
-      ti++; i++;
-   }
-      while (j<n) { /* finish up upper half */
-         tmp[ti] = arr[j];
-         ti++; j++;
-   }
-   memcpy(arr, tmp, n*sizeof(int));
+  const int a = *((const int*) pa);
+  const int b = *((const int*) pb);
 
-} // end of merge()
+  return (a-b);
+}
 
-void mergesort(int * arr, int n, int * tmp)
-{
-   if (n < 2) return;
+void merge(int * array, int * workspace, int low, int mid, int high) {
 
-   #pragma omp task firstprivate (arr, n, tmp)
-   mergesort(arr, n/2, tmp);
+  int i = low;
+  int j = mid + 1;
+  int l = low;
 
-   #pragma omp task firstprivate (arr, n, tmp)
-   mergesort(arr+(n/2), n-(n/2), tmp);
- 
-   #pragma omp taskwait
+  while( (l <= mid) && (j <= high) ) {
+    if( array[l] <= array[j] ) {
+      workspace[i] = array[l];
+      l++;
+    } else {
+      workspace[i] = array[j];
+      j++;
+    }
+    i++;
+  }
+  if (l > mid) {
+    for(int k=j; k <= high; k++) {
+      workspace[i]=array[k];
+      i++;
+    }
+  } else {
+    for(int k=l; k <= mid; k++) {
+      workspace[i]=array[k];
+      i++;
+    }
+  }
+  for(int k=low; k <= high; k++) {
+    array[k] = workspace[k];
+  }
+}
 
-    /* merge sorted halves into sorted list */
-   merge(arr, n, tmp);
+void mergesort_impl(int array[],int workspace[],int low,int high) {
+
+  const int threshold = 1000000;
+
+  if( high - low > threshold  ) {
+    int mid = (low+high)/2;
+    /* Recursively sort on halves */
+#ifdef _OPENMP
+#pragma omp task 
+#endif
+    mergesort_impl(array,workspace,low,mid);
+#ifdef _OPENMP
+#pragma omp task
+#endif
+    mergesort_impl(array,workspace,mid+1,high);
+#ifdef _OPENMP
+#pragma omp taskwait
+#endif
+    /* Merge the two sorted halves */
+#ifdef _OPENMP
+#pragma omp task
+#endif
+    merge(array,workspace,low,mid,high);
+#ifdef _OPENMP
+#pragma omp taskwait
+#endif
+  } else if (high - low > 0) {
+    /* Coarsen the base case */
+    qsort(&array[low],high-low+1,sizeof(int),compare);
+  }
+
+}
+
+void mergesort(int array[],int workspace[],int low,int high) {
+  #ifdef _OPENMP
+  #pragma omp parallel
+  #endif
+  {
+#ifdef _OPENMP
+#pragma omp single nowait
+#endif
+    mergesort_impl(array,workspace,low,high);
+  }
 }
 
 
@@ -94,7 +137,8 @@ int main (int argc, char* argv[]) {
     #pragma omp parallel
     {
       #pragma omp single
-      mergesort(arr, n, tmp);
+      // mergesort(arr, n, tmp);
+      mergesort(arr,tmp,0,n-1);
     }
   auto clock_end = std::chrono::system_clock::now();
   std::chrono::duration<double> elapsed_seconds = clock_end-clock_start;
