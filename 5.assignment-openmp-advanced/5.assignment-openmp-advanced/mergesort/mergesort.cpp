@@ -4,64 +4,64 @@
 #include <fcntl.h>
 #include <iostream>
 #include <unistd.h>
+#include <chrono>
 #include <string.h>
-#include <time.h>
+#include <stdlib.h>
+#include <omp.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
   void generateMergeSortData (int* arr, size_t n);
   void checkMergeSortResult (int* arr, size_t n);
+
 #ifdef __cplusplus
 }
 #endif
 
-void merge(int *X, int n, int *tmp)
+void merge(int * arr, int n, int * tmp) {
+   int i = 0;
+   int j = n/2;
+   int ti = 0;
+
+   while (i<n/2 && j<n) {
+      if (arr[i] < arr[j]) {
+         tmp[ti] = arr[i];
+         ti++; i++;
+      } else {
+         tmp[ti] = arr[j];
+         ti++; j++;
+      }
+   }
+   while (i<n/2) { /* finish up lower half */
+      tmp[ti] = arr[i];
+      ti++; i++;
+   }
+      while (j<n) { /* finish up upper half */
+         tmp[ti] = arr[j];
+         ti++; j++;
+   }
+   memcpy(arr, tmp, n*sizeof(int));
+
+} // end of merge()
+
+void mergesort(int * arr, int n, int * tmp)
 {
-  int i = 0;
-  int j = n/2;
-  int ti = 0;
-  
-  while ( (i < (n/2)) && j < n)
-  {
-    if( X[i] < X[j])
-    {
-      tmp[ti] = X[i];
-      ti += 1; i += 1;
-    }else{
-      tmp[ti] = X[j];
-      ti += 1; j += 1;
-    }
-  }
-  
-  while( i < n/2)
-  {
-    tmp[ti] = X[i];
-    ti += 1; i += 1;
-  }
-  
-  while( j < n)
-  {
-    tmp[ti] = X[j];
-    ti += 1; j += 1;
-  }
-  
-  memcpy(X, tmp, n*sizeof(int));
+   if (n < 2) return;
+
+   #pragma omp task firstprivate (arr, n, tmp)
+   mergesort(arr, n/2, tmp);
+
+   #pragma omp task firstprivate (arr, n, tmp)
+   mergesort(arr+(n/2), n-(n/2), tmp);
+ 
+   #pragma omp taskwait
+
+    /* merge sorted halves into sorted list */
+   merge(arr, n, tmp);
 }
 
-void mergesort(int *X, int n, int *tmp)
-{
-  if(n < 2) return;
-  
-  #pragma omp task firstprivate (X, n, tmp)
-  mergesort(X, n/2, tmp);
-  
-  #pragma omp task firstprivate (X, n, tmp)
-  mergesort(X + (n/2), n-(n/2), tmp);
-  
-  #pragma omp taskwait
-  merge(X, n, tmp);
-}
 
 int main (int argc, char* argv[]) {
 
@@ -77,7 +77,7 @@ int main (int argc, char* argv[]) {
     }
   }
   
-  if (argc < 3) { std::cerr<<"Usage: "<<argv[0]<<" <n> <nbthreads>"<<std::endl;
+  if (argc < 3) { std::cerr<<"usage: "<<argv[0]<<" <n> <nbthreads>"<<std::endl;
     return -1;
   }
 
@@ -85,22 +85,20 @@ int main (int argc, char* argv[]) {
   
   // get arr data
   int * arr = new int [n];
-  int *tmp = new int[n];
+  int * tmp = new int [n];
   generateMergeSortData (arr, n);
 
   //insert sorting code here.
-  clock_t exec_time;
-  
-  exec_time = clock();
-  #pragma omp parallel
-  {
-    #pragma omp single
-    mergesort(arr, n, tmp);
-  }
-  exec_time = clock() - exec_time;
-  
-  double cpuTime = (double)exec_time / CLOCKS_PER_SEC;
-  std::cerr << cpuTime << std::endl;
+
+  auto clock_start = std::chrono::system_clock::now(); 
+    #pragma omp parallel
+    {
+      #pragma omp single
+      mergesort(arr, n, tmp);
+    }
+  auto clock_end = std::chrono::system_clock::now();
+  std::chrono::duration<double> elapsed_seconds = clock_end-clock_start;
+  std::cerr<<elapsed_seconds.count()<<std::endl;
   
   checkMergeSortResult (arr, n);
   
