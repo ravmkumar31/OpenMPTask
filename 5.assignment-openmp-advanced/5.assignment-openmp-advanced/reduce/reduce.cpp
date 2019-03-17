@@ -67,6 +67,7 @@ int main (int argc, char* argv[]) {
   int * arr = new int [n];
   int i,tid;
 
+  omp_set_num_threads(nbthreads);
   generateReduceData (arr, atoi(argv[1]));
 
   //insert reduction code here
