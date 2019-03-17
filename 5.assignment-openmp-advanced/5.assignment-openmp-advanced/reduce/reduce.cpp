@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include<chrono>
 #include <unistd.h>
+#include <math.h>
 
 
 #ifdef __cplusplus
@@ -26,35 +27,6 @@ int compute(int *arr, int loop_start, int loop_end){
     partial_sum+=arr[j];
   }
   return partial_sum;
-}
-
-int reduce(int *arr, size_t n, int nbthreads){
-  int sum;
-  #pragma omp parallel
-  {
-    #pragma omp single 
-    {
-      int chunk_size = n/nbthreads;
-      // #pragma omp parallel for
-      for(int i=0; i<n; i+=chunk_size){
-        int partial_sum;
-        int loop_start = i;
-        int loop_end = loop_start+chunk_size;
-        if(loop_end>n){
-          loop_end = n;
-        }
-        #pragma omp task
-        {
-          partial_sum = compute(arr, loop_start, loop_end);
-        }
-        #pragma omp critical
-        {
-          sum+=partial_sum;
-        }
-      }
-    }
-  }
-  return sum;
 }
 
 
@@ -83,19 +55,36 @@ int main (int argc, char* argv[]) {
   int * arr = new int [n];
   int i,tid;
   
-  int * partial_sum = new int [nbthreads];
-  
+  // int * partial_sum = new int [nbthreads];
+  int reduce_sum;
   omp_set_num_threads(nbthreads);
   generateReduceData (arr, atoi(argv[1]));
 
   //insert reduction code here
   auto clock_start = std::chrono::system_clock::now(); 
-  result = reduce(arr, n, nbthreads);
-  
-  // for(int thread =0;thread <= nbthreads; thread++){
-  //   result+=partial_sum[thread];
-  // }
-
+  #pragma omp parallel
+  {
+    int partial_sum;
+    #pragma omp single 
+    {
+      int chunk_size =ceil(static_cast<float>(n/nbthreads));;
+      for(int i=0; i<n; i+=chunk_size){
+        int loop_start = i;
+        int loop_end = loop_start+chunk_size;
+        if(loop_end>n){
+          loop_end = n;
+        }
+        #pragma omp task
+        {
+          partial_sum = compute(arr, loop_start, loop_end);
+        }
+        #pragma omp critical
+        {
+          reduce_sum+=partial_sum;
+        }
+      }
+    }
+  }
   auto clock_end = std::chrono::system_clock::now();
   std::chrono::duration<double> elapsed_seconds = clock_end-clock_start;
 
