@@ -66,7 +66,7 @@ void mergeSort(int * arr, int l, int r,int * temp)
       mergeSort(arr,l,mid,temp);
       mergeSort(arr,mid+1,r,temp);
       merge(arr,l,mid,r,temp);
-      // return;
+      return;
      }
     
     #pragma omp task untied firstprivate(arr,temp,l,mid,chunk)
@@ -108,7 +108,13 @@ int main (int argc, char* argv[]) {
 
   //insert sorting code here.
   auto clock_start = std::chrono::system_clock::now(); 
-  mergeSort(arr,0,n-1,temp);
+  #pragma omp parallel
+  { 
+    #pragma omp single
+    {
+      mergeSort(arr,0,n-1,temp);
+    }  
+  }
   auto clock_end = std::chrono::system_clock::now();
   std::chrono::duration<double> elapsed_seconds = clock_end-clock_start;
    
