@@ -20,6 +20,33 @@ extern "C" {
 
 
 
+int* reduce(int *arr, size_t n, int nbthreads, int *partial_sum){
+  int granularity = n/nbthreads;
+  #pragma omp parallel for
+  for(int i=0; i<n; i+=granularity){
+
+    int j;
+
+    int begin = i;
+
+    int end = begin+granularity;
+
+    if(end>n){
+
+      end = n;
+    }
+    #pragma omp task
+    {
+      for(j=begin;j<end;j++){
+        partial_sum[omp_get_thread_num()]+=arr[j];
+      }
+    }
+  }
+
+  return partial_sum;
+}
+
+
 int main (int argc, char* argv[]) {
   //forces openmp to create the threads beforehand
 #pragma omp parallel
@@ -43,35 +70,25 @@ int main (int argc, char* argv[]) {
   int nbthreads= atoi(argv[2]);
   int chunk = n/nbthreads;
   int * arr = new int [n];
-  int reslt=0,i,tid;
-
+  int i,tid;
+  int result=0;
+  int * partial_sum = new int [nbthreads];
+  
+  omp_set_num_threads(nbthreads);
   generateReduceData (arr, atoi(argv[1]));
 
   //insert reduction code here
   auto clock_start = std::chrono::system_clock::now(); 
+  reduce(arr, n, nbthreads,partial_sum);
   
-  #pragma omp parallel default(shared) private(i, tid)
-  {
-     int begin, end, sum=0;
-           tid= omp_get_thread_num();
-           begin= ((tid)*chunk);
-           end= ((tid+1)*chunk);
-  
-            #pragma omp task
-            {
-                 for(i=begin; i<end; i++){
-      sum+= arr[i] ;
-    }
-           }
-            #pragma omp critical
-              reslt+=sum; 
+  for(int thread =0;thread <= nbthreads; thread++){
+    result+=partial_sum[thread];
   }
-  
 
   auto clock_end = std::chrono::system_clock::now();
   std::chrono::duration<double> elapsed_seconds = clock_end-clock_start;
 
-  std::cout<<reslt<<std::endl;
+  std::cout<<result<<std::endl;
 
   std::cerr<<elapsed_seconds.count()<<std::endl;
     
