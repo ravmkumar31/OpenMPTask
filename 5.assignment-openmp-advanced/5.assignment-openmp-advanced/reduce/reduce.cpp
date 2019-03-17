@@ -18,28 +18,6 @@ extern "C" {
 }
 #endif
 
-int reslt=0;
-
-float reduce(int *arr, size_t n, int nbthreads  )
-{
-  #pragma omp parallel default(shared)
-  {
-    int sub_chunk = n/nbthreads;
-    int begin, end, sum=0;
-    int tid= omp_get_thread_num();
-    begin= ((tid)*sub_chunk);
-    end= ((tid+1)*sub_chunk);
-
-    #pragma omp task
-    {
-      for(int i=begin; i<end; i++){
-        sum+= arr[i] ;
-      }
-    }
-    #pragma omp critical
-    reslt+=sum; 
-  }
-}
 
 
 int main (int argc, char* argv[]) {
@@ -65,15 +43,29 @@ int main (int argc, char* argv[]) {
   int nbthreads= atoi(argv[2]);
   int chunk = n/nbthreads;
   int * arr = new int [n];
-  int i,tid;
+  int reslt=0,i,tid;
 
-  omp_set_num_threads(nbthreads);
   generateReduceData (arr, atoi(argv[1]));
 
   //insert reduction code here
   auto clock_start = std::chrono::system_clock::now(); 
-  reduce(arr, n, nbthreads);
   
+  #pragma omp parallel default(shared) private(i, tid)
+  {
+     int begin, end, sum=0;
+           tid= omp_get_thread_num();
+           begin= ((tid)*chunk);
+           end= ((tid+1)*chunk);
+  
+            #pragma omp task
+            {
+                 for(i=begin; i<end; i++){
+      sum+= arr[i] ;
+    }
+           }
+            #pragma omp critical
+              reslt+=sum; 
+  }
   
 
   auto clock_end = std::chrono::system_clock::now();
