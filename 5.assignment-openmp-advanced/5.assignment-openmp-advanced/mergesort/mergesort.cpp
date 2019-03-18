@@ -22,66 +22,61 @@ extern "C" {
 
 
 
-void merge(int * arr, int l, int m, int r,int * temp) 
+void merge(int * arr, int array_start, int array_center, int array_end,int * temp_arr) 
 { 
-    int i, j, k; 
-    int n1 = m - l + 1; 
-    int n2 =  r - m; 
-    for(i=l,j=m+1,k=l;i<=m &&j<=r;)
-     {
-        if(arr[i] <arr[j]){
-           temp[k] = arr[i];
-           i++; k++;
+  int i, j, k; 
+  for(i=array_start,j=array_center+1,k=array_start;i<=array_center &&j<=array_end;)
+  {
+    if(arr[i] <arr[j]){
+      temp_arr[k] = arr[i];
+      i++; k++;
     }
-        else
-        {
-           temp[k] = arr[j];
-           j++; k++;
-         }           
-     }
-    if(i <= m)
+    else
     {
-     for(;i<=m;i++,k++)
-      temp[k] = arr[i];
-    }
-    if(j <= r)
-    {
-     for(;j<=r;j++,k++)
-      temp[k] = arr[j];
-    }
-    for(i = l;i<=r;i++)
-        arr[i] = temp[i];
-  
+      temp_arr[k] = arr[j];
+      j++; k++;
+     }           
+  }
+  if(i <= array_center)
+  {
+   for(;i<=array_center;i++,k++)
+    temp_arr[k] = arr[i];
+  }
+  if(j <= array_end)
+  {
+   for(;j<=array_end;j++,k++)
+    temp_arr[k] = arr[j];
+  }
+  for(i = array_start;i<=array_end;i++)
+      arr[i] = temp_arr[i];
 } 
 
-int chunk;
+int granularity;
 
-void mergeSort(int * arr, int l, int r,int * temp) 
+void mergeSort(int * arr, int array_start, int array_end,int * temp_arr) 
 {
-   if( l >= r)
-       return;
-   int mid = (l+r)/2; 
-    if((r-l) <= chunk)
-    {
-      mergeSort(arr,l,mid,temp);
-      mergeSort(arr,mid+1,r,temp);
-      merge(arr,l,mid,r,temp);
-      return;
-     }
-    
-    #pragma omp task untied firstprivate(arr,temp,l,mid,chunk)
-          mergeSort(arr,l,mid,temp);
-    #pragma omp task untied firstprivate(arr,temp,r,mid,chunk)
-          mergeSort(arr,mid+1,r,temp);
-    #pragma omp taskwait
-    merge(arr,l,mid,r,temp);
+  if( array_start >= array_end)
+    return;
+  int mid = (array_start+array_end)/2; 
+  if((array_end-array_start) <= (granularity))
+  {
+    mergeSort(arr,array_start,mid,temp_arr);
+    mergeSort(arr,mid+1,array_end,temp_arr);
+    merge(arr,array_start,mid,array_end,temp_arr);
+    return;
+  }
+  #pragma omp task untied firstprivate(arr,temp_arr,array_start,mid,granularity)
+    mergeSort(arr,array_start,mid,temp_arr);
+  #pragma omp task untied firstprivate(arr,temp_arr,array_end,mid,granularity)
+    mergeSort(arr,mid+1,array_end,temp_arr);
+  #pragma omp taskwait
+  merge(arr,array_start,mid,array_end,temp_arr);
 }
 
 
 int main (int argc, char* argv[]) {
-
   //forces openmp to create the threads beforehand
-#pragma omp parallel
+  #pragma omp parallel
   {
     int fd = open (argv[0], O_RDONLY);
     if (fd != -1) {
@@ -98,12 +93,13 @@ int main (int argc, char* argv[]) {
 
   int n = atoi(argv[1]);
   int nbthreads= atoi(argv[2]);
-  chunk = n/nbthreads;
+  granularity = n/nbthreads;
   
   // get arr data
   int * arr = new int [n];
-  int * temp = new int [n];
   generateMergeSortData (arr, n);
+
+  int * temp_arr = new int [n];
   omp_set_num_threads(nbthreads);
 
   //insert sorting code here.
@@ -112,14 +108,14 @@ int main (int argc, char* argv[]) {
   { 
     #pragma omp single
     {
-      mergeSort(arr,0,n-1,temp);
+      mergeSort(arr,0,n-1,temp_arr);
     }  
   }
   auto clock_end = std::chrono::system_clock::now();
-  std::chrono::duration<double> elapsed_seconds = clock_end-clock_start;
+  std::chrono::duration<double> total_time = clock_end-clock_start;
    
   checkMergeSortResult (arr, n);
-  std::cerr<<elapsed_seconds.count()<<std::endl;
+  std::cerr<<total_time.count()<<std::endl;
   
   delete[] arr;
 

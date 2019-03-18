@@ -19,9 +19,9 @@ extern "C" {
 }
 #endif
 
-int result=0;
+int reduce_sum=0;
 
-int compute(int *arr, int loop_start, int loop_end){
+int compute_thread_sum(int *arr, int loop_start, int loop_end){
   int partial_sum;
   for(int j=loop_start;j<loop_end;j++){
     partial_sum+=arr[j];
@@ -51,12 +51,11 @@ int main (int argc, char* argv[]) {
 
   int n = atoi(argv[1]);
   int nbthreads= atoi(argv[2]);
-  int chunk = n/nbthreads;
+  int graularity = n/nbthreads;
   int * arr = new int [n];
-  int i,tid;
+  int i;
   
-  // int * partial_sum = new int [nbthreads];
-  int reduce_sum;
+  // int reduce_sum;
   omp_set_num_threads(nbthreads);
   generateReduceData (arr, atoi(argv[1]));
 
@@ -67,16 +66,15 @@ int main (int argc, char* argv[]) {
     int partial_sum;
     #pragma omp single 
     {
-      int chunk_size =ceil(static_cast<float>(n/nbthreads));;
-      for(int i=0; i<n; i+=chunk_size){
+      for(int i=0; i<n; i+=graularity){
         int loop_start = i;
-        int loop_end = loop_start+chunk_size;
+        int loop_end = loop_start+graularity;
         if(loop_end>n){
           loop_end = n;
         }
         #pragma omp task
         {
-          partial_sum = compute(arr, loop_start, loop_end);
+          partial_sum = compute_thread_sum(arr, loop_start, loop_end);
         }
         #pragma omp critical
         {
@@ -88,7 +86,7 @@ int main (int argc, char* argv[]) {
   auto clock_end = std::chrono::system_clock::now();
   std::chrono::duration<double> elapsed_seconds = clock_end-clock_start;
 
-  std::cout<<result<<std::endl;
+  std::cout<<reduce_sum<<std::endl;
 
   std::cerr<<elapsed_seconds.count()<<std::endl;
     
