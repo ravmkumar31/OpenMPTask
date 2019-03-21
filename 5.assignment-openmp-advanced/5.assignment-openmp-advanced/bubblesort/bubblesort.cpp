@@ -48,19 +48,10 @@ int main (int argc, char* argv[]) {
 
 
   std::chrono::time_point<std::chrono::system_clock> start = std::chrono::system_clock::now();
-
-  int granularity = 500;
-  if(n<=10)
-    granularity = 50;
-  else 
-    granularity = 5*n*0.01;
-
   for(  int i = 0;  i < n;  i++ )
   {       
     int first = i % 2;     
-    
-    
-    #pragma omp parallel for schedule(guided,granularity) ,shared(arr,first, n)
+    #pragma omp parallel for default(none) ,shared(arr,first, n)
     for(  int j = first;  j < n-1;  j += 2  )
     {       
       if(  arr[ j ]  >  arr[ j+1 ]  )
@@ -70,9 +61,6 @@ int main (int argc, char* argv[]) {
       }       
     }       
   }
-    
-     
-  
   std::chrono::time_point<std::chrono::system_clock> end = std::chrono::system_clock::now();
   std::chrono::duration<double> elpased_seconds = end-start;
 

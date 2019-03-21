@@ -38,9 +38,9 @@ int lcs( char *X, char *Y, int m, int n, int nbthreads )
   else 
     granularity = 5*n*0.01;
   
-  int** C = new int*[m+1];
+  int** temp_arr = new int*[m+1];
   for (int i=0; i<=m; ++i) {
-    C[i] = new int[n+1];
+    temp_arr[i] = new int[n+1];
   }
   
   int i, j; 
@@ -51,23 +51,23 @@ int lcs( char *X, char *Y, int m, int n, int nbthreads )
     for (j=0; j<=n; j++) 
     { 
       if (i == 0 || j == 0) 
-        C[i][j] = 0; 
+        temp_arr[i][j] = 0; 
 
       else if (X[i-1] == Y[j-1]) 
-        C[i][j] = C[i-1][j-1] + 1; 
+        temp_arr[i][j] = temp_arr[i-1][j-1] + 1; 
 
       else
-        C[i][j] = max(C[i-1][j], C[i][j-1]); 
+        temp_arr[i][j] = max(temp_arr[i-1][j], temp_arr[i][j-1]); 
     } 
   } 
 
-  int result = C[m][n];
+  int result = temp_arr[m][n];
   
   #pragma omp taskwait
   for (int i=0; i<=m; ++i) { 
-    delete[] C[i];
+    delete[] temp_arr[i];
   }
-  delete[] C;
+  delete[] temp_arr;
   
   return result; 
   
