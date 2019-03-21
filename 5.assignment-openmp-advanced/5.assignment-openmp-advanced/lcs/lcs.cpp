@@ -1,15 +1,13 @@
-#include <omp.h>
 #include <stdio.h>
-#include <iostream>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <iostream>
 #include <unistd.h>
-#include <algorithm>
-#include <math.h>
-#include <stdlib.h>
-#include <chrono>
-#include <string.h>
+#include <omp.h>
+
+using namespace std;
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,62 +21,11 @@ extern "C" {
 #endif
 
 
-/* Utility function to get max of 2 integers */
-int max(int a, int b) 
-{ 
-  return (a > b)? a : b; 
-} 
-
-/* Returns length of LCS for X[0..m-1], Y[0..n-1] */
-int lcs( char *X, char *Y, int m, int n, int nbthreads ) 
-{ 
-  int granularity = 500;
-  if(n<=10)
-    granularity = 50;
-  else 
-    granularity = 5*n*0.01;
-  
-  int** C = new int*[m+1];
-  for (int i=0; i<=m; ++i) {
-    C[i] = new int[n+1];
-  }
-  
-  int i, j; 
-  
-  #pragma omp parallel for schedule(guided,granularity)
-  for (i=0; i<=m; i++) 
-  { 
-    for (j=0; j<=n; j++) 
-    { 
-      if (i == 0 || j == 0) 
-        C[i][j] = 0; 
-
-      else if (X[i-1] == Y[j-1]) 
-        C[i][j] = C[i-1][j-1] + 1; 
-
-      else
-        C[i][j] = max(C[i-1][j], C[i][j-1]); 
-    } 
-  } 
-
-  int result = C[m][n];
-  
-  #pragma omp taskwait
-  for (int i=0; i<=m; ++i) { 
-    delete[] C[i];
-  }
-  delete[] C;
-  
-  return result; 
-  
-} 
-
-
 
 int main (int argc, char* argv[]) {
 
-//forces openmp to create the threads beforehand
-  #pragma omp parallel
+  //forces openmp to create the threads beforehand
+#pragma omp parallel
   {
     int fd = open (argv[0], O_RDONLY);
     if (fd != -1) {
@@ -93,34 +40,108 @@ int main (int argc, char* argv[]) {
     return -1;
   }
 
-  int nbthreads = atoi(argv[3]);
-  omp_set_num_threads(nbthreads);
-  
   int m = atoi(argv[1]);
   int n = atoi(argv[2]);
-
+  int nbthreads = atoi(argv[3]);
+  omp_set_num_threads(nbthreads);
   // get string data 
   char *X = new char[m];
   char *Y = new char[n];
   generateLCS(X, m, Y, n);
+  int min = m,max = n;
+ // cout<<"max: "<<max;
+  char *mo = Y, *le = X;
+  if(min > n)
+  {
+    min = n; mo = X;
+    max = m; le = Y;
+  }
+  //cout<<mo<<endl;
+  //cout<<le<<endl;
+  int p = max/nbthreads;
+  int r = max%nbthreads;
+  if(nbthreads>max)
+    {
+      p = max;
+      nbthreads = max;
+    }
+  int length = 2*nbthreads;
+  int *L;
+  if(r){
+    L = new int[2*(nbthreads+1)];
+    length = length + 2;
+   }
+  else
+     L = new int[2*nbthreads];
+   //insert LCS code here.
+  int result = -1; // length of common subsequence
+  double start = omp_get_wtime();
+  int begin = 0;
+    #pragma omp parallel for schedule(static)
+    for(int j=0;j<max;j++)
+    {
+           int index = j/p;index=index*2; int i;
+         //cout<<index<<"----------"<<endl;
+         for(i=begin;i<min;i++)
+         {
+           //cout<<le[i]<<"\t"<<mo[j]<<endl;
+           if(le[i] == mo[j])
+            {
+              if(L[index] == 0)
+                     {
+                       L[index] = i+1;
+                       L[index+1] = i+1;
+                     }
+                  else
+                     L[index+1] = i+1;
+                 //cout<<index<<"\t"<<L[index]<<"\t"<<L[index+1]<<endl; 
+        begin = i+1;
+              break;
+             
+            }
+         }
+    }
+    /*for(int i=0;i<length;i++)
+      cout<<L[i]<<"\t";
+    cout<<endl; */
+    int mst = L[0],mend = L[1];
+    result = mend-mst+1;
+    for(int i=2;(i+1)<length;i=i+2)
+    {
+       if(mst == 0 && mend ==0)
+          {
+              mst = L[i]; mend = L[i+1]; result = mend-mst+1;
+          }
+       else if(L[i+1] > mend)
+         {
+            if(L[i] < mst){
+               result = L[i+1]-L[i]+1;
+               mst = L[i]; mend = L[i+1];
+               }
+            else if(L[i] >mst)
+            {
+               if(L[i] <mend  || L[i]==(mend+1))
+                  {
+                     result = L[i+1]-mst+1;
+                     mend = L[i+1];
+                  }
+            }
+         }
+       else if(L[i] <mst)
+        {
+           if(L[i+1] >mst || L[i+1] == (mst-1))
+              {
+                  result = mend-L[i]+1;
+                  mst = L[i];
+               }
+         }
+            
+    }
+  //cout<<result<<endl;
+  double end = omp_get_wtime();
+  cerr<<(end-start)<<endl;
+  checkLCS(X, m, Y, n, result);
 
-  
-  std::chrono::time_point<std::chrono::system_clock> start = std::chrono::system_clock::now();
-
-  int lcs_res = 0;
-  
-  #pragma omp parallel
-  #pragma omp single nowait
-  lcs_res = lcs( X, Y, m, n , nbthreads) ;
-  
-  std::chrono::time_point<std::chrono::system_clock> end = std::chrono::system_clock::now();
-  std::chrono::duration<double> elpased_seconds = end-start;
-
-  checkLCS(X, m, Y, n, lcs_res);
-  std::cerr<<elpased_seconds.count()<<std::endl;
-
-  delete[] X;
-  delete[] Y;
 
   return 0;
 }
