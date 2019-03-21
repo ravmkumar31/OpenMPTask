@@ -5,8 +5,8 @@
 #include <iostream>
 #include <unistd.h>
 #include <omp.h>
-#include <cmath>
-#include <chrono>
+
+using namespace std;
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,11 +18,67 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
+void merge(int a[], int l, int m, int r,int b[]) 
+{ 
+    int i, j, k; 
+    int n1 = m - l + 1; 
+    int n2 =  r - m; 
+    for(i=l,j=m+1,k=l;i<=m &&j<=r;)
+     {
+        if(a[i] <a[j]){
+           b[k] = a[i];
+           i++; k++;
+    }
+        else
+        {
+           b[k] = a[j];
+           j++; k++;
+         }           
+     }
+    if(i <= m)
+    {
+     for(;i<=m;i++,k++)
+      b[k] = a[i];
+    }
+    if(j <= r)
+    {
+     for(;j<=r;j++,k++)
+      b[k] = a[j];
+    }
+    for(i = l;i<=r;i++)
+        a[i] = b[i];
+  
+}
 
+void bubbleSort(int arr[], int start,int end) 
+{ 
+   int i, j; 
+   for (i = start; i <= end; i++)       
+   { 
+       for (j = start; j < end-(i-start); j++)  
+        {
+         if (arr[j] > arr[j+1]) 
+       {
+         int temp = arr[j];
+         arr[j] = arr[j+1];
+         arr[j+1]  = temp;
+       } 
+        }
+   }
+} 
+
+void printArray(int arr[],int s,int e)
+{
+   for(int i=s;i<=e;i++)
+     cout<<arr[i]<<"\t";
+   cout<<endl;
+}
 
 int main (int argc, char* argv[]) {
-  
-  #pragma omp parallel
+
+
+  //forces openmp to create the threads beforehand
+#pragma omp parallel
   {
     int fd = open (argv[0], O_RDONLY);
     if (fd != -1) {
@@ -32,54 +88,75 @@ int main (int argc, char* argv[]) {
       std::cerr<<"something is amiss"<<std::endl;
     }
   }
-
+  
   if (argc < 3) { std::cerr<<"usage: "<<argv[0]<<" <n> <nbthreads>"<<std::endl;
     return -1;
   }
-  
-  int nbthreads = atoi(argv[2]);
-  omp_set_num_threads(nbthreads);
-  
-  int n = atoi(argv[1]);
 
+  int n = atoi(argv[1]);
+  int *b = new int[n];
+  int nbthreads = atoi(argv[2]);
+  
+  int p = n/nbthreads;
+  int r = n%nbthreads;
   // get arr data
   int * arr = new int [n];
-  generateMergeSortData(arr, n);
+  generateMergeSortData (arr, n);
 
-
-  std::chrono::time_point<std::chrono::system_clock> start = std::chrono::system_clock::now();
-
-  int granularity = 500;
-  if(n<=10)
-    granularity = 50;
-  else 
-    granularity = 5*n*0.01;
-
-  for(  int i = 0;  i < n;  i++ )
-  {       
-    int first = i % 2;     
-    
-    
-    #pragma omp parallel for schedule(guided,granularity) ,shared(arr,first, n)
-    for(  int j = first;  j < n-1;  j += 2  )
-    {       
-      if(  arr[ j ]  >  arr[ j+1 ]  )
-      {       
-        std::swap(  arr[ j ],  arr[ j+1 ]  );
-        
-      }       
-    }       
+  //insert sorting code here.
+  //int end;
+  omp_set_num_threads(nbthreads);
+  if(nbthreads > n)
+  {
+    nbthreads = n;
+    p = 1;
   }
-    
-     
+  double start = omp_get_wtime();
+  #pragma omp parallel for schedule(static)
+  for(int i=0;i<nbthreads;i++)
+  {
+    int end = (i+1)*p-1;
+   // if(i == (nbthreads-1))
+  //     end = n-1;
+          //cout<<"start: "<<i*p<<"end: "<<end<<endl;
+          //printArray(arr,i*p,end);
+    bubbleSort(arr,i*p,end);
+          //printArray(arr,i*p,end);
+  }
+  if(r!=0)
+  {
+    bubbleSort(arr,n-r,n-1);
+  }
+  for(int level = p;(level/2) < n;level = level*2)
+    {
+        #pragma omp parallel for schedule(static)
+        for(int bindex=0;bindex < n;bindex += (2*level))
+        {
+            int start = bindex;
+            int mid = bindex + (level-1);
+            int end = bindex + ((2*level)-1);
+            if(mid >= n)
+            {
+               mid = (bindex+n-1)/2;
+               end = n-1;
+            }
+            else if(end >= n)
+            {
+                end = n-1;
+            }
+      //cout<<"mergestart: "<<start<<"mergeend: "<<end<<endl;
+            merge(arr,start,mid,end,b);
+        }
+      
+     //cout<<"---------------------------------------------"<<endl;
+    }
+  double end = omp_get_wtime();
   
-  std::chrono::time_point<std::chrono::system_clock> end = std::chrono::system_clock::now();
-  std::chrono::duration<double> elpased_seconds = end-start;
-
+  cerr<<(end-start)<<endl;
+  
   checkMergeSortResult (arr, n);
-  std::cerr<<elpased_seconds.count()<<std::endl;
-
+  
   delete[] arr;
-
+  delete[] b;
   return 0;
 }
