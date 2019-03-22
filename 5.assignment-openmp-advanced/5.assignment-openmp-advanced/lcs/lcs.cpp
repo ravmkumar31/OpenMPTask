@@ -23,21 +23,8 @@ extern "C" {
 #endif
 
 
-/* Utility function to get max of 2 integers */
-int max(int a, int b) 
+int compute_lcs( char *X, int m, char *Y,  int n, int nbthreads ) 
 { 
-  return (a > b)? a : b; 
-} 
-
-/* Returns length of LCS for X[0..m-1], Y[0..n-1] */
-int lcs( char *X, char *Y, int m, int n, int nbthreads ) 
-{ 
-  int granularity = 500;
-  if(n<=10)
-    granularity = 50;
-  else 
-    granularity = 5*n*0.01;
-  
   int** temp_arr = new int*[m+1];
   for (int i=0; i<=m; ++i) {
     temp_arr[i] = new int[n+1];
@@ -45,7 +32,7 @@ int lcs( char *X, char *Y, int m, int n, int nbthreads )
   
   int i, j; 
   
-  #pragma omp parallel for schedule(guided,granularity)
+  #pragma omp parallel for schedule(guided)
   for (i=0; i<=m; i++) 
   { 
     for (j=0; j<=n; j++) 
@@ -57,7 +44,7 @@ int lcs( char *X, char *Y, int m, int n, int nbthreads )
         temp_arr[i][j] = temp_arr[i-1][j-1] + 1; 
 
       else
-        temp_arr[i][j] = max(temp_arr[i-1][j], temp_arr[i][j-1]); 
+        temp_arr[i][j] = std::max(temp_arr[i-1][j], temp_arr[i][j-1]); 
     } 
   } 
 
@@ -105,19 +92,19 @@ int main (int argc, char* argv[]) {
   generateLCS(X, m, Y, n);
 
   
-  std::chrono::time_point<std::chrono::system_clock> start = std::chrono::system_clock::now();
+  auto clock_start = std::chrono::system_clock::now();
 
   int lcs_res = 0;
   
   #pragma omp parallel
   #pragma omp single nowait
-  lcs_res = lcs( X, Y, m, n , nbthreads) ;
+  lcs_res = compute_lcs( X, m, Y, n , nbthreads) ;
   
-  std::chrono::time_point<std::chrono::system_clock> end = std::chrono::system_clock::now();
-  std::chrono::duration<double> elpased_seconds = end-start;
+  auto clock_end =  std::chrono::system_clock::now();
+  std::chrono::duration<double> total_time = clock_end-clock_start;
 
   checkLCS(X, m, Y, n, lcs_res);
-  std::cerr<<elpased_seconds.count()<<std::endl;
+  std::cerr<<total_time.count()<<std::endl;
 
   delete[] X;
   delete[] Y;

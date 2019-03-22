@@ -47,12 +47,13 @@ int main (int argc, char* argv[]) {
   generateMergeSortData(arr, n);
 
 
-  std::chrono::time_point<std::chrono::system_clock> start = std::chrono::system_clock::now();
+  auto clock_start = std::chrono::system_clock::now();
+  //First For loop without making it parallel 
   for(  int i = 0;  i < n;  i++ )
   {       
-    int first = i % 2;     
-    #pragma omp parallel for default(none) ,shared(arr,first, n)
-    for(  int j = first;  j < n-1;  j += 2  )
+    int loop_chunk = i % 2; //find which two elements places to swapped parallely     
+    #pragma omp parallel for default(none) ,shared(arr,loop_chunk, n)
+    for(  int j = loop_chunk;  j < n-1;  j += 2 )
     {       
       if(  arr[ j ]  >  arr[ j+1 ]  )
       {       
@@ -61,11 +62,11 @@ int main (int argc, char* argv[]) {
       }       
     }       
   }
-  std::chrono::time_point<std::chrono::system_clock> end = std::chrono::system_clock::now();
-  std::chrono::duration<double> elpased_seconds = end-start;
+  auto clock_end = std::chrono::system_clock::now();
+  std::chrono::duration<double> total_time = clock_end-clock_start;
 
   checkMergeSortResult (arr, n);
-  std::cerr<<elpased_seconds.count()<<std::endl;
+  std::cerr<<total_time.count()<<std::endl;
 
   delete[] arr;
 
